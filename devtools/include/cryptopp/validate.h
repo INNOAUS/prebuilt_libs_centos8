@@ -83,6 +83,7 @@ bool ValidateARC4();
 
 bool ValidateRC5();
 bool ValidateBlowfish();
+bool ValidateBlowfishCompat();
 bool ValidateThreeWay();
 bool ValidateGOST();
 bool ValidateSHARK();
@@ -116,6 +117,7 @@ bool ValidateSosemanuk();
 bool ValidateVMAC();
 bool ValidateCCM();
 bool ValidateGCM();
+bool ValidateXTS();
 bool ValidateCMAC();
 
 bool ValidateBBS();
@@ -200,7 +202,7 @@ private:
 inline std::string TimeToString(const time_t& t)
 {
 #if (CRYPTOPP_MSC_VERSION >= 1400)
-	tm localTime = {};
+	tm localTime;
 	char timeBuf[64];
 	errno_t err;
 
@@ -210,8 +212,11 @@ inline std::string TimeToString(const time_t& t)
 	CRYPTOPP_ASSERT(err == 0);
 
 	std::string str(err == 0 ? timeBuf : "");
+#elif defined(__MINGW32__) || defined(__MINGW64__)
+	char* timeString = ::asctime(::localtime(&t));
+	std::string str(timeString ? timeString : "");
 #elif (_POSIX_C_SOURCE >= 1 || _XOPEN_SOURCE || _BSD_SOURCE || _SVID_SOURCE || defined(_POSIX_SOURCE))
-	tm localTime = {};
+	tm localTime;
 	char timeBuf[64];
 	char* timeString = ::asctime_r(::localtime_r(&t, &localTime), timeBuf);
 	std::string str(timeString ? timeString : "");

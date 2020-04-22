@@ -97,7 +97,8 @@ struct stream<NextLayer, deflateSupported>::impl_type
     bool                    wr_cont         /* next write is a continuation */ = false;
     bool                    wr_frag         /* autofrag the current message */ = false;
     bool                    wr_frag_opt     /* autofrag option setting */ = true;
-    bool                    wr_compress     /* compress current message */ = false;
+    bool                    wr_compress;    /* compress current message */
+    bool                    wr_compress_opt /* compress message setting */ = true;
     detail::opcode          wr_opcode       /* message type */ = detail::opcode::text;
     std::unique_ptr<
         std::uint8_t[]>     wr_buf;         // write buffer
@@ -209,11 +210,22 @@ struct stream<NextLayer, deflateSupported>::impl_type
         timer.cancel();
     }
 
-    // Called before each write frame
+    void
+    time_out()
+    {
+        timed_out = true;
+        change_status(status::closed);
+        close_socket(get_lowest_layer(stream()));
+    }
+
+    // Called just before sending
+    // the first frame of each message
     void
     begin_msg()
     {
         wr_frag = wr_frag_opt;
+        wr_compress =
+            this->pmd_enabled() && wr_compress_opt;
 
         // Maintain the write buffer
         if( this->pmd_enabled() ||
@@ -232,6 +244,8 @@ struct stream<NextLayer, deflateSupported>::impl_type
             wr_buf_size = wr_buf_opt;
             wr_buf.reset();
         }
+
+        //
     }
 
     //--------------------------------------------------------------------------
@@ -445,7 +459,11 @@ struct stream<NextLayer, deflateSupported>::impl_type
             }
             else
             {
-                BOOST_ASSERT(! is_timer_set());
+                // VFALCO This assert goes off when there's also
+                // a pending read with the timer set. The bigger
+                // fix is to give close its own timeout, instead
+                // of using the handshake timeout.
+                // BOOST_ASSERT(! is_timer_set());
             }
             break;
 
@@ -506,8 +524,7 @@ private:
             switch(impl.status_)
             {
             case status::handshake:
-                impl.timed_out = true;
-                close_socket(get_lowest_layer(impl.stream()));
+                impl.time_out();
                 return;
 
             case status::open:
@@ -527,14 +544,11 @@ private:
                     return;
                 }
 
-                // timeout
-                impl.timed_out = true;
-                close_socket(get_lowest_layer(impl.stream()));
+                impl.time_out();
                 return;
 
             case status::closing:
-                impl.timed_out = true;
-                close_socket(get_lowest_layer(impl.stream()));
+                impl.time_out();
                 return;
 
             case status::closed:

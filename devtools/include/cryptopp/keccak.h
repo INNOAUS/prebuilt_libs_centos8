@@ -30,7 +30,7 @@ NAMESPACE_BEGIN(CryptoPP)
 ///   <pre>  Keccack_192 : public Keccack
 ///   {
 ///     public:
-///       CRYPTOPP_CONSTANT(DIGESTSIZE = 24)
+///       CRYPTOPP_CONSTANT(DIGESTSIZE = 24);
 ///       Keccack_192() : Keccack(DIGESTSIZE) {}
 ///   };
 ///   </pre>
@@ -72,8 +72,8 @@ template<unsigned int T_DigestSize>
 class Keccak_Final : public Keccak
 {
 public:
-    CRYPTOPP_CONSTANT(DIGESTSIZE = T_DigestSize)
-    CRYPTOPP_CONSTANT(BLOCKSIZE = 200 - 2 * DIGESTSIZE)
+    CRYPTOPP_CONSTANT(DIGESTSIZE = T_DigestSize);
+    CRYPTOPP_CONSTANT(BLOCKSIZE = 200 - 2 * DIGESTSIZE);
     static std::string StaticAlgorithmName()
         { return "Keccak-" + IntToString(DIGESTSIZE * 8); }
 

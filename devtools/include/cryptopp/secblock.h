@@ -7,8 +7,9 @@
 #define CRYPTOPP_SECBLOCK_H
 
 #include "config.h"
-#include "stdcpp.h"
+#include "allocate.h"
 #include "misc.h"
+#include "stdcpp.h"
 
 #if CRYPTOPP_MSC_VERSION
 # pragma warning(push)
@@ -147,22 +148,29 @@ typedef typename AllocatorBase<T>::const_reference const_reference;
 template <class T, class A>
 typename A::pointer StandardReallocate(A& alloc, T *oldPtr, typename A::size_type oldSize, typename A::size_type newSize, bool preserve)
 {
-	CRYPTOPP_ASSERT((oldPtr && oldSize) || !(oldPtr || oldSize));
+	// Avoid assert on pointer in reallocate. SecBlock regularly uses NULL
+	// pointers rather returning non-NULL 0-sized pointers.
 	if (oldSize == newSize)
 		return oldPtr;
 
 	if (preserve)
 	{
 		typename A::pointer newPointer = alloc.allocate(newSize, NULLPTR);
-		const size_t copySize = STDMIN(oldSize, newSize) * sizeof(T);
+		const typename A::size_type copySize = STDMIN(oldSize, newSize) * sizeof(T);
 
-		if (oldPtr && newPointer) {memcpy_s(newPointer, copySize, oldPtr, copySize);}
-		alloc.deallocate(oldPtr, oldSize);
+		if (oldPtr && newPointer)
+			memcpy_s(newPointer, copySize, oldPtr, copySize);
+
+		if (oldPtr)
+			alloc.deallocate(oldPtr, oldSize);
+
 		return newPointer;
 	}
 	else
 	{
-		alloc.deallocate(oldPtr, oldSize);
+		if (oldPtr)
+			alloc.deallocate(oldPtr, oldSize);
+
 		return alloc.allocate(newSize, NULLPTR);
 	}
 }
@@ -187,12 +195,11 @@ public:
 	/// \returns a memory block
 	/// \throws InvalidArgument
 	/// \details allocate() first checks the size of the request. If it is non-0
-	///  and less than max_size(), then an attempt is made to fulfill the request using either
-	///  AlignedAllocate() or UnalignedAllocate().
-	/// \details AlignedAllocate() is used if T_Align16 is true.
-	///  UnalignedAllocate() used if T_Align16 is false.
-	/// \details This is the C++ *Placement New* operator. ptr is not used, and the function
-	///  CRYPTOPP_ASSERTs in Debug builds if ptr is non-NULL.
+	///  and less than max_size(), then an attempt is made to fulfill the request
+	///  using either AlignedAllocate() or UnalignedAllocate(). AlignedAllocate() is
+	///  used if T_Align16 is true. UnalignedAllocate() used if T_Align16 is false.
+	/// \details This is the C++ *Placement New* operator. ptr is not used, and the
+	///  function asserts in Debug builds if ptr is non-NULL.
 	/// \sa CallNewHandler() for the methods used to recover from a failed
 	///  allocation attempt.
 	/// \note size is the count of elements, and not the number of bytes
@@ -204,8 +211,7 @@ public:
 			return NULLPTR;
 
 #if CRYPTOPP_BOOL_ALIGN16
-		// TODO: Does this need the test 'size*sizeof(T) >= 16'?
-		if (T_Align16 && size)
+		if (T_Align16)
 			return reinterpret_cast<pointer>(AlignedAllocate(size*sizeof(T)));
 #endif
 
@@ -215,24 +221,26 @@ public:
 	/// \brief Deallocates a block of memory
 	/// \param ptr the pointer for the allocation
 	/// \param size the size of the allocation, in elements
-	/// \details Internally, SecureWipeArray() is called before deallocating the memory.
-	///  Once the memory block is wiped or zeroized, AlignedDeallocate() or
-	///  UnalignedDeallocate() is called.
+	/// \details Internally, SecureWipeArray() is called before deallocating the
+	///  memory. Once the memory block is wiped or zeroized, AlignedDeallocate()
+	///  or UnalignedDeallocate() is called.
 	/// \details AlignedDeallocate() is used if T_Align16 is true.
 	///  UnalignedDeallocate() used if T_Align16 is false.
 	void deallocate(void *ptr, size_type size)
 	{
-		// This will fire if SetMark(0) was called in the SecBlock
-		// Our self tests exercise it, disable it now.
-		// CRYPTOPP_ASSERT((ptr && size) || !(ptr || size));
-		SecureWipeArray(reinterpret_cast<pointer>(ptr), size);
+		// Avoid assert on pointer in deallocate. SecBlock regularly uses NULL
+		// pointers rather returning non-NULL 0-sized pointers.
+		if (ptr)
+		{
+			SecureWipeArray(reinterpret_cast<pointer>(ptr), size);
 
 #if CRYPTOPP_BOOL_ALIGN16
-		if (T_Align16 && size)
-			return AlignedDeallocate(ptr);
+			if (T_Align16)
+				return AlignedDeallocate(ptr);
 #endif
 
-		UnalignedDeallocate(ptr);
+			UnalignedDeallocate(ptr);
+		}
 	}
 
 	/// \brief Reallocates a block of memory
@@ -412,6 +420,8 @@ public:
 	///  size are passed to the allocator for deallocation.
 	void deallocate(void *ptr, size_type size)
 	{
+		// Avoid assert on pointer in deallocate. SecBlock regularly uses NULL
+		// pointers rather returning non-NULL 0-sized pointers.
 		if (ptr == GetAlignedArray())
 		{
 			// If the m_allocated assert fires then the bit twiddling for
@@ -424,7 +434,10 @@ public:
 			SecureWipeArray(reinterpret_cast<pointer>(ptr), size);
 		}
 		else
-			m_fallbackAllocator.deallocate(ptr, size);
+		{
+			if (ptr)
+				m_fallbackAllocator.deallocate(ptr, size);
+		}
 	}
 
 	/// \brief Reallocates a block of memory
@@ -458,7 +471,7 @@ public:
 		pointer newPointer = allocate(newSize, NULLPTR);
 		if (preserve && newSize)
 		{
-			const size_t copySize = STDMIN(oldSize, newSize);
+			const size_type copySize = STDMIN(oldSize, newSize);
 			memcpy_s(newPointer, sizeof(T)*newSize, oldPtr, sizeof(T)*copySize);
 		}
 		deallocate(oldPtr, oldSize);
@@ -611,6 +624,8 @@ public:
 	///   size are passed to the allocator for deallocation.
 	void deallocate(void *ptr, size_type size)
 	{
+		// Avoid assert on pointer in deallocate. SecBlock regularly uses NULL
+		// pointers rather returning non-NULL 0-sized pointers.
 		if (ptr == GetAlignedArray())
 		{
 			// If the m_allocated assert fires then
@@ -621,7 +636,11 @@ public:
 			SecureWipeArray((pointer)ptr, size);
 		}
 		else
-			m_fallbackAllocator.deallocate(ptr, size);
+		{
+			if (ptr)
+				m_fallbackAllocator.deallocate(ptr, size);
+			m_allocated = false;
+		}
 	}
 
 	/// \brief Reallocates a block of memory
@@ -655,7 +674,7 @@ public:
 		pointer newPointer = allocate(newSize, NULLPTR);
 		if (preserve && newSize)
 		{
-			const size_t copySize = STDMIN(oldSize, newSize);
+			const size_type copySize = STDMIN(oldSize, newSize);
 			memcpy_s(newPointer, sizeof(T)*newSize, oldPtr, sizeof(T)*copySize);
 		}
 		deallocate(oldPtr, oldSize);

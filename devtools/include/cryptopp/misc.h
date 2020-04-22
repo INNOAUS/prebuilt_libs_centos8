@@ -6,7 +6,11 @@
 #ifndef CRYPTOPP_MISC_H
 #define CRYPTOPP_MISC_H
 
-#include "config.h"
+#include "cryptlib.h"
+#include "secblockfwd.h"
+#include "smartptr.h"
+#include "stdcpp.h"
+#include "trap.h"
 
 #if !defined(CRYPTOPP_DOXYGEN_PROCESSING)
 
@@ -25,10 +29,6 @@
 # pragma GCC diagnostic ignored "-Wsign-conversion"
 # pragma GCC diagnostic ignored "-Wunused-function"
 #endif
-
-#include "cryptlib.h"
-#include "stdcpp.h"
-#include "smartptr.h"
 
 #ifdef _MSC_VER
 	#if _MSC_VER >= 1400
@@ -433,6 +433,7 @@ inline size_t PtrByteDiff(const PTR pointer1, const PTR pointer2)
 /// \param str std::string
 /// \details BytePtr returns NULL pointer for an empty string.
 /// \return Pointer to the first element of a string
+/// \since Crypto++ 8.0
 inline byte* BytePtr(std::string& str)
 {
 	// Caller wants a writeable pointer
@@ -443,15 +444,31 @@ inline byte* BytePtr(std::string& str)
 	return reinterpret_cast<byte*>(&str[0]);
 }
 
+/// \brief Pointer to the first element of a string
+/// \param str SecByteBlock
+/// \details BytePtr returns NULL pointer for an empty string.
+/// \return Pointer to the first element of a string
+/// \since Crypto++ 8.3
+byte* BytePtr(SecByteBlock& str);
+
 /// \brief Const pointer to the first element of a string
 /// \param str std::string
 /// \details ConstBytePtr returns non-NULL pointer for an empty string.
 /// \return Pointer to the first element of a string
+/// \since Crypto++ 8.0
 inline const byte* ConstBytePtr(const std::string& str)
 {
-	// Use c_str() so a pointer is always available
-	return reinterpret_cast<const byte*>(str.c_str());
+	if (str.empty())
+		return NULLPTR;
+	return reinterpret_cast<const byte*>(&str[0]);
 }
+
+/// \brief Const pointer to the first element of a string
+/// \param str SecByteBlock
+/// \details ConstBytePtr returns non-NULL pointer for an empty string.
+/// \return Pointer to the first element of a string
+/// \since Crypto++ 8.3
+const byte* ConstBytePtr(const SecByteBlock& str);
 
 /// \brief Size of a string
 /// \param str std::string
@@ -460,6 +477,11 @@ inline size_t BytePtrSize(const std::string& str)
 {
 	return str.size();
 }
+
+/// \brief Size of a string
+/// \param str SecByteBlock
+/// \return size of a string
+size_t BytePtrSize(const SecByteBlock& str);
 
 #if (!__STDC_WANT_SECURE_LIB__ && !defined(_MEMORY_S_DEFINED)) || defined(CRYPTOPP_WANT_SECURE_LIB)
 
@@ -1248,17 +1270,6 @@ inline CipherDir GetCipherDir(const T &obj)
 	return obj.IsForwardTransformation() ? ENCRYPTION : DECRYPTION;
 }
 
-/// \brief Attempts to reclaim unused memory
-/// \throws bad_alloc
-/// \details In the normal course of running a program, a request for memory normally succeeds. If a
-///   call to AlignedAllocate or UnalignedAllocate fails, then CallNewHandler is called in
-///   an effort to recover. Internally, CallNewHandler calls set_new_handler(NULLPTR) in an effort
-///   to free memory. There is no guarantee CallNewHandler will be able to procure more memory so
-///   an allocation succeeds. If the call to set_new_handler fails, then CallNewHandler throws
-///   a bad_alloc exception.
-/// \sa AlignedAllocate, AlignedDeallocate, UnalignedAllocate, UnalignedDeallocate
-CRYPTOPP_DLL void CRYPTOPP_API CallNewHandler();
-
 /// \brief Performs an addition with carry on a block of bytes
 /// \param inout the byte block
 /// \param size the size of the block, in bytes
@@ -1497,46 +1508,6 @@ std::string StringNarrow(const wchar_t *str, bool throwOnError = true);
 ///   then a 0x21 error is returned on Windows which eventually results in an InvalidArgument() exception.
 std::wstring StringWiden(const char *str, bool throwOnError = true);
 
-/// \brief Allocates a buffer on 16-byte boundary
-/// \param size the size of the buffer
-/// \details AlignedAllocate is primarily used when the data will be
-///   proccessed by SSE, NEON, ARMv8 or PowerPC instructions. The assembly
-///   language routines rely on the alignment. If the alignment is not
-///   respected, then a SIGBUS could be generated on Unix and Linux, and an
-///   EXCEPTION_DATATYPE_MISALIGNMENT could be generated on Windows.
-/// \details Formerly, AlignedAllocate and AlignedDeallocate were only
-///   available on certain platforms when CRYTPOPP_DISABLE_ASM was not in
-///   effect. However, Android and iOS debug simulator builds got into a
-///   state where the aligned allocator was not available and caused link
-///   failures.
-/// \since AlignedAllocate for SIMD since Crypto++ 1.0, AlignedAllocate
-///   for all builds since Crypto++ 8.1
-/// \sa AlignedDeallocate, UnalignedAllocate, UnalignedDeallocate, CallNewHandler,
-///   <A HREF="http://github.com/weidai11/cryptopp/issues/779">Issue 779</A>
-CRYPTOPP_DLL void* CRYPTOPP_API AlignedAllocate(size_t size);
-
-/// \brief Frees a buffer allocated with AlignedAllocate
-/// \param ptr the buffer to free
-/// \since AlignedDeallocate for SIMD since Crypto++ 1.0, AlignedAllocate
-///   for all builds since Crypto++ 8.1
-/// \sa AlignedAllocate, UnalignedAllocate, UnalignedDeallocate, CallNewHandler,
-///   <A HREF="http://github.com/weidai11/cryptopp/issues/779">Issue 779</A>
-CRYPTOPP_DLL void CRYPTOPP_API AlignedDeallocate(void *ptr);
-
-/// \brief Allocates a buffer
-/// \param size the size of the buffer
-/// \since Crypto++ 1.0
-/// \sa AlignedAllocate, AlignedDeallocate, UnalignedDeallocate, CallNewHandler,
-///   <A HREF="http://github.com/weidai11/cryptopp/issues/779">Issue 779</A>
-CRYPTOPP_DLL void * CRYPTOPP_API UnalignedAllocate(size_t size);
-
-/// \brief Frees a buffer allocated with UnalignedAllocate
-/// \param ptr the buffer to free
-/// \since Crypto++ 1.0
-/// \sa AlignedAllocate, AlignedDeallocate, UnalignedAllocate, CallNewHandler,
-///   <A HREF="http://github.com/weidai11/cryptopp/issues/779">Issue 779</A>
-CRYPTOPP_DLL void CRYPTOPP_API UnalignedDeallocate(void *ptr);
-
 // ************** rotate functions ***************
 
 /// \brief Performs a left rotate
@@ -1560,9 +1531,9 @@ template <unsigned int R, class T> inline T rotlConstant(T x)
 	// http://gcc.gnu.org/bugzilla/show_bug.cgi?id=57157,
 	// http://software.intel.com/en-us/forums/topic/580884
 	// and http://llvm.org/bugs/show_bug.cgi?id=24226
-	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8)
-	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1)
-	CRYPTOPP_ASSERT(R < THIS_SIZE);
+	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8);
+	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1);
+	CRYPTOPP_ASSERT(static_cast<int>(R) < THIS_SIZE);
 	return T((x<<R)|(x>>(-R&MASK)));
 }
 
@@ -1586,9 +1557,9 @@ template <unsigned int R, class T> inline T rotrConstant(T x)
 	// http://gcc.gnu.org/bugzilla/show_bug.cgi?id=57157,
 	// http://software.intel.com/en-us/forums/topic/580884
 	// and http://llvm.org/bugs/show_bug.cgi?id=24226
-	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8)
-	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1)
-	CRYPTOPP_ASSERT(R < THIS_SIZE);
+	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8);
+	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1);
+	CRYPTOPP_ASSERT(static_cast<int>(R) < THIS_SIZE);
 	return T((x >> R)|(x<<(-R&MASK)));
 }
 
@@ -1611,9 +1582,9 @@ template <class T> inline T rotlFixed(T x, unsigned int y)
 	// http://gcc.gnu.org/bugzilla/show_bug.cgi?id=57157,
 	// http://software.intel.com/en-us/forums/topic/580884
 	// and http://llvm.org/bugs/show_bug.cgi?id=24226
-	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8)
-	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1)
-	CRYPTOPP_ASSERT(y < THIS_SIZE);
+	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8);
+	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1);
+	CRYPTOPP_ASSERT(static_cast<int>(y) < THIS_SIZE);
 	return T((x<<y)|(x>>(-y&MASK)));
 }
 
@@ -1636,9 +1607,9 @@ template <class T> inline T rotrFixed(T x, unsigned int y)
 	// http://gcc.gnu.org/bugzilla/show_bug.cgi?id=57157,
 	// http://software.intel.com/en-us/forums/topic/580884
 	// and http://llvm.org/bugs/show_bug.cgi?id=24226
-	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8)
-	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1)
-	CRYPTOPP_ASSERT(y < THIS_SIZE);
+	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8);
+	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1);
+	CRYPTOPP_ASSERT(static_cast<int>(y) < THIS_SIZE);
 	return T((x >> y)|(x<<(-y&MASK)));
 }
 
@@ -1656,9 +1627,9 @@ template <class T> inline T rotrFixed(T x, unsigned int y)
 /// \since Crypto++ 3.0
 template <class T> inline T rotlVariable(T x, unsigned int y)
 {
-	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8)
-	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1)
-	CRYPTOPP_ASSERT(y < THIS_SIZE);
+	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8);
+	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1);
+	CRYPTOPP_ASSERT(static_cast<int>(y) < THIS_SIZE);
 	return T((x<<y)|(x>>(-y&MASK)));
 }
 
@@ -1676,9 +1647,9 @@ template <class T> inline T rotlVariable(T x, unsigned int y)
 /// \since Crypto++ 3.0
 template <class T> inline T rotrVariable(T x, unsigned int y)
 {
-	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8)
-	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1)
-	CRYPTOPP_ASSERT(y < THIS_SIZE);
+	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8);
+	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1);
+	CRYPTOPP_ASSERT(static_cast<int>(y) < THIS_SIZE);
 	return T((x>>y)|(x<<(-y&MASK)));
 }
 
@@ -1693,8 +1664,8 @@ template <class T> inline T rotrVariable(T x, unsigned int y)
 /// \since Crypto++ 3.0
 template <class T> inline T rotlMod(T x, unsigned int y)
 {
-	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8)
-	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1)
+	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8);
+	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1);
 	return T((x<<(y&MASK))|(x>>(-y&MASK)));
 }
 
@@ -1709,8 +1680,8 @@ template <class T> inline T rotlMod(T x, unsigned int y)
 /// \since Crypto++ 3.0
 template <class T> inline T rotrMod(T x, unsigned int y)
 {
-	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8)
-	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1)
+	CRYPTOPP_CONSTANT(THIS_SIZE = sizeof(T)*8);
+	CRYPTOPP_CONSTANT(MASK = THIS_SIZE-1);
 	return T((x>>(y&MASK))|(x<<(-y&MASK)));
 }
 
