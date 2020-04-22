@@ -1,7 +1,10 @@
-#pragma once
+// Copyright (c) 2017-2020, University of Cincinnati, developed by Henry Schreiner
+// under NSF AWARD 1414736 and by the respective contributors.
+// All rights reserved.
+//
+// SPDX-License-Identifier: BSD-3-Clause
 
-// Distributed under the 3-Clause BSD License.  See accompanying
-// file LICENSE or https://github.com/CLIUtils/CLI11 for details.
+#pragma once
 
 #include <algorithm>
 #include <iomanip>
@@ -25,29 +28,23 @@ std::ostream &operator<<(std::ostream &in, const T &item) {
     return in << static_cast<typename std::underlying_type<T>::type>(item);
 }
 
-/// input streaming for enumerations
-template <typename T, typename = typename std::enable_if<std::is_enum<T>::value>::type>
-std::istream &operator>>(std::istream &in, T &item) {
-    typename std::underlying_type<T>::type i;
-    in >> i;
-    item = static_cast<T>(i);
-    return in;
-}
-} // namespace enums
+}  // namespace enums
 
 /// Export to CLI namespace
-using namespace enums;
+using enums::operator<<;
 
 namespace detail {
-
+/// a constant defining an expected max vector size defined to be a big number that could be multiplied by 4 and not
+/// produce overflow for some expected uses
+constexpr int expected_max_vector_size{1 << 29};
 // Based on http://stackoverflow.com/questions/236129/split-a-string-in-c
 /// Split a string by a delim
 inline std::vector<std::string> split(const std::string &s, char delim) {
     std::vector<std::string> elems;
     // Check to see if empty string, give consistent result
-    if(s.empty())
+    if(s.empty()) {
         elems.emplace_back();
-    else {
+    } else {
         std::stringstream ss;
         ss.str(s);
         std::string item;
@@ -56,17 +53,6 @@ inline std::vector<std::string> split(const std::string &s, char delim) {
         }
     }
     return elems;
-}
-/// simple utility to convert various types to a string
-template <typename T> inline std::string as_string(const T &v) {
-    std::ostringstream s;
-    s << v;
-    return s.str();
-}
-// if the data type is already a string just forward it
-template <typename T, typename = typename std::enable_if<std::is_constructible<std::string, T>::value>::type>
-inline auto as_string(T &&v) -> decltype(std::forward<T>(v)) {
-    return std::forward<T>(v);
 }
 
 /// Simple function to join a string
@@ -101,7 +87,7 @@ std::string join(const T &v, Callable func, std::string delim = ",") {
 /// Join a string in reverse order
 template <typename T> std::string rjoin(const T &v, std::string delim = ",") {
     std::ostringstream s;
-    for(size_t start = 0; start < v.size(); start++) {
+    for(std::size_t start = 0; start < v.size(); start++) {
         if(start > 0)
             s << delim;
         s << v[v.size() - start - 1];
@@ -152,19 +138,35 @@ inline std::string trim_copy(const std::string &str) {
     return trim(s);
 }
 
+/// remove quotes at the front and back of a string either '"' or '\''
+inline std::string &remove_quotes(std::string &str) {
+    if(str.length() > 1 && (str.front() == '"' || str.front() == '\'')) {
+        if(str.front() == str.back()) {
+            str.pop_back();
+            str.erase(str.begin(), str.begin() + 1);
+        }
+    }
+    return str;
+}
+
 /// Make a copy of the string and then trim it, any filter string can be used (any char in string is filtered)
 inline std::string trim_copy(const std::string &str, const std::string &filter) {
     std::string s = str;
     return trim(s, filter);
 }
 /// Print a two part "help" string
-inline std::ostream &format_help(std::ostream &out, std::string name, std::string description, size_t wid) {
+inline std::ostream &format_help(std::ostream &out, std::string name, std::string description, std::size_t wid) {
     name = "  " + name;
     out << std::setw(static_cast<int>(wid)) << std::left << name;
     if(!description.empty()) {
         if(name.length() >= wid)
             out << "\n" << std::setw(static_cast<int>(wid)) << "";
-        out << description;
+        for(const char c : description) {
+            out.put(c);
+            if(c == '\n') {
+                out << std::setw(static_cast<int>(wid)) << "";
+            }
+        }
     }
     out << "\n";
     return out;
@@ -188,6 +190,17 @@ inline bool valid_name_string(const std::string &str) {
     return true;
 }
 
+/// check if a string is a container segment separator (empty or "%%"
+inline bool is_separator(const std::string &str) {
+    static const std::string sep("%%");
+    return (str.empty() || str == sep);
+}
+
+/// Verify that str consists of letters only
+inline bool isalpha(const std::string &str) {
+    return std::all_of(str.begin(), str.end(), [](char c) { return std::isalpha(c, std::locale()); });
+}
+
 /// Return a lower case version of a string
 inline std::string to_lower(std::string str) {
     std::transform(std::begin(str), std::end(str), std::begin(str), [](const std::string::value_type &x) {
@@ -205,7 +218,7 @@ inline std::string remove_underscore(std::string str) {
 /// Find and replace a substring with another substring
 inline std::string find_and_replace(std::string str, std::string from, std::string to) {
 
-    size_t start_pos = 0;
+    std::size_t start_pos = 0;
 
     while((start_pos = str.find(from, start_pos)) != std::string::npos) {
         str.replace(start_pos, from.length(), to);
@@ -221,11 +234,12 @@ inline bool has_default_flag_values(const std::string &flags) {
 }
 
 inline void remove_default_flag_values(std::string &flags) {
-    size_t loc = flags.find_first_of('{');
+    auto loc = flags.find_first_of('{');
     while(loc != std::string::npos) {
         auto finish = flags.find_first_of("},", loc + 1);
         if((finish != std::string::npos) && (flags[finish] == '}')) {
-            flags.erase(flags.begin() + loc, flags.begin() + finish + 1);
+            flags.erase(flags.begin() + static_cast<std::ptrdiff_t>(loc),
+                        flags.begin() + static_cast<std::ptrdiff_t>(finish) + 1);
         }
         loc = flags.find_first_of('{', loc + 1);
     }
@@ -256,8 +270,9 @@ inline std::ptrdiff_t find_member(std::string name,
         it = std::find_if(std::begin(names), std::end(names), [&name](std::string local_name) {
             return detail::remove_underscore(local_name) == name;
         });
-    } else
+    } else {
         it = std::find(std::begin(names), std::end(names), name);
+    }
 
     return (it != std::end(names)) ? (it - std::begin(names)) : (-1);
 }
@@ -265,7 +280,7 @@ inline std::ptrdiff_t find_member(std::string name,
 /// Find a trigger string and call a modify callable function that takes the current string and starting position of the
 /// trigger and returns the position in the string to search for the next trigger string
 template <typename Callable> inline std::string find_and_modify(std::string str, std::string trigger, Callable modify) {
-    size_t start_pos = 0;
+    std::size_t start_pos = 0;
     while((start_pos = str.find(trigger, start_pos)) != std::string::npos) {
         start_pos = modify(str, start_pos);
     }
@@ -274,10 +289,12 @@ template <typename Callable> inline std::string find_and_modify(std::string str,
 
 /// Split a string '"one two" "three"' into 'one two', 'three'
 /// Quote characters can be ` ' or "
-inline std::vector<std::string> split_up(std::string str) {
+inline std::vector<std::string> split_up(std::string str, char delimiter = '\0') {
 
     const std::string delims("\'\"`");
-    auto find_ws = [](char ch) { return std::isspace<char>(ch, std::locale()); };
+    auto find_ws = [delimiter](char ch) {
+        return (delimiter == '\0') ? (std::isspace<char>(ch, std::locale()) != 0) : (ch == delimiter);
+    };
     trim(str);
 
     std::vector<std::string> output;
@@ -287,7 +304,7 @@ inline std::vector<std::string> split_up(std::string str) {
         if(delims.find_first_of(str[0]) != std::string::npos) {
             keyChar = str[0];
             auto end = str.find_first_of(keyChar, 1);
-            while((end != std::string::npos) && (str[end - 1] == '\\')) { // deal with escaped quotes
+            while((end != std::string::npos) && (str[end - 1] == '\\')) {  // deal with escaped quotes
                 end = str.find_first_of(keyChar, end + 1);
                 embeddedQuote = true;
             }
@@ -303,7 +320,7 @@ inline std::vector<std::string> split_up(std::string str) {
             if(it != std::end(str)) {
                 std::string value = std::string(str.begin(), it);
                 output.push_back(value);
-                str = std::string(it, str.end());
+                str = std::string(it + 1, str.end());
             } else {
                 output.push_back(str);
                 str = "";
@@ -323,7 +340,7 @@ inline std::vector<std::string> split_up(std::string str) {
 /// at the start of the first line). `"; "` would be for ini files
 ///
 /// Can't use Regex, or this would be a subs.
-inline std::string fix_newlines(std::string leader, std::string input) {
+inline std::string fix_newlines(const std::string &leader, std::string input) {
     std::string::size_type n = 0;
     while(n != std::string::npos && n < input.size()) {
         n = input.find('\n', n);
@@ -339,13 +356,13 @@ inline std::string fix_newlines(std::string leader, std::string input) {
 /// then modifies the string to replace the equality with a space.  This is needed
 /// to allow the split up function to work properly and is intended to be used with the find_and_modify function
 /// the return value is the offset+1 which is required by the find_and_modify function.
-inline size_t escape_detect(std::string &str, size_t offset) {
+inline std::size_t escape_detect(std::string &str, std::size_t offset) {
     auto next = str[offset + 1];
     if((next == '\"') || (next == '\'') || (next == '`')) {
         auto astart = str.find_last_of("-/ \"\'`", offset - 1);
         if(astart != std::string::npos) {
             if(str[astart] == ((str[offset] == '=') ? '-' : '/'))
-                str[offset] = ' '; // interpret this as a space so the split_up works properly
+                str[offset] = ' ';  // interpret this as a space so the split_up works properly
         }
     }
     return offset + 1;
@@ -363,6 +380,6 @@ inline std::string &add_quotes_if_needed(std::string &str) {
     return str;
 }
 
-} // namespace detail
+}  // namespace detail
 
-} // namespace CLI
+}  // namespace CLI

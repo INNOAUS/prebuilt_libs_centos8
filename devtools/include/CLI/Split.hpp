@@ -1,10 +1,14 @@
-#pragma once
+// Copyright (c) 2017-2020, University of Cincinnati, developed by Henry Schreiner
+// under NSF AWARD 1414736 and by the respective contributors.
+// All rights reserved.
+//
+// SPDX-License-Identifier: BSD-3-Clause
 
-// Distributed under the 3-Clause BSD License.  See accompanying
-// file LICENSE or https://github.com/CLIUtils/CLI11 for details.
+#pragma once
 
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "CLI/Error.hpp"
@@ -19,8 +23,8 @@ inline bool split_short(const std::string &current, std::string &name, std::stri
         name = current.substr(1, 1);
         rest = current.substr(2);
         return true;
-    } else
-        return false;
+    }
+    return false;
 }
 
 // Returns false if not a long option. Otherwise, sets opt name and other side of = and returns true
@@ -35,8 +39,8 @@ inline bool split_long(const std::string &current, std::string &name, std::strin
             value = "";
         }
         return true;
-    } else
-        return false;
+    }
+    return false;
 }
 
 // Returns false if not a windows style option. Otherwise, sets opt name and value and returns true
@@ -51,14 +55,14 @@ inline bool split_windows_style(const std::string &current, std::string &name, s
             value = "";
         }
         return true;
-    } else
-        return false;
+    }
+    return false;
 }
 
 // Splits a string into multiple long and short names
 inline std::vector<std::string> split_names(std::string current) {
     std::vector<std::string> output;
-    size_t val;
+    std::size_t val;
     while((val = current.find(",")) != std::string::npos) {
         output.push_back(trim_copy(current.substr(0, val)));
         current = current.substr(val + 1);
@@ -103,9 +107,10 @@ get_names(const std::vector<std::string> &input) {
     std::string pos_name;
 
     for(std::string name : input) {
-        if(name.length() == 0)
+        if(name.length() == 0) {
             continue;
-        else if(name.length() > 1 && name[0] == '-' && name[1] != '-') {
+        }
+        if(name.length() > 1 && name[0] == '-' && name[1] != '-') {
             if(name.length() == 2 && valid_first_char(name[1]))
                 short_names.emplace_back(1, name[1]);
             else
@@ -129,5 +134,5 @@ get_names(const std::vector<std::string> &input) {
         short_names, long_names, pos_name);
 }
 
-} // namespace detail
-} // namespace CLI
+}  // namespace detail
+}  // namespace CLI

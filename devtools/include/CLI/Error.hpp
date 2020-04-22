@@ -1,12 +1,16 @@
-#pragma once
+// Copyright (c) 2017-2020, University of Cincinnati, developed by Henry Schreiner
+// under NSF AWARD 1414736 and by the respective contributors.
+// All rights reserved.
+//
+// SPDX-License-Identifier: BSD-3-Clause
 
-// Distributed under the 3-Clause BSD License.  See accompanying
-// file LICENSE or https://github.com/CLIUtils/CLI11 for details.
+#pragma once
 
 #include <exception>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 // CLI library includes
 #include "CLI/StringTools.hpp"
@@ -205,33 +209,36 @@ class ValidationError : public ParseError {
 class RequiredError : public ParseError {
     CLI11_ERROR_DEF(ParseError, RequiredError)
     explicit RequiredError(std::string name) : RequiredError(name + " is required", ExitCodes::RequiredError) {}
-    static RequiredError Subcommand(size_t min_subcom) {
-        if(min_subcom == 1)
+    static RequiredError Subcommand(std::size_t min_subcom) {
+        if(min_subcom == 1) {
             return RequiredError("A subcommand");
-        else
-            return RequiredError("Requires at least " + std::to_string(min_subcom) + " subcommands",
-                                 ExitCodes::RequiredError);
+        }
+        return RequiredError("Requires at least " + std::to_string(min_subcom) + " subcommands",
+                             ExitCodes::RequiredError);
     }
-    static RequiredError Option(size_t min_option, size_t max_option, size_t used, const std::string &option_list) {
+    static RequiredError
+    Option(std::size_t min_option, std::size_t max_option, std::size_t used, const std::string &option_list) {
         if((min_option == 1) && (max_option == 1) && (used == 0))
             return RequiredError("Exactly 1 option from [" + option_list + "]");
-        else if((min_option == 1) && (max_option == 1) && (used > 1))
+        if((min_option == 1) && (max_option == 1) && (used > 1)) {
             return RequiredError("Exactly 1 option from [" + option_list + "] is required and " + std::to_string(used) +
                                      " were given",
                                  ExitCodes::RequiredError);
-        else if((min_option == 1) && (used == 0))
+        }
+        if((min_option == 1) && (used == 0))
             return RequiredError("At least 1 option from [" + option_list + "]");
-        else if(used < min_option)
+        if(used < min_option) {
             return RequiredError("Requires at least " + std::to_string(min_option) + " options used and only " +
                                      std::to_string(used) + "were given from [" + option_list + "]",
                                  ExitCodes::RequiredError);
-        else if(max_option == 1)
+        }
+        if(max_option == 1)
             return RequiredError("Requires at most 1 options be given from [" + option_list + "]",
                                  ExitCodes::RequiredError);
-        else
-            return RequiredError("Requires at most " + std::to_string(max_option) + " options be used and " +
-                                     std::to_string(used) + "were given from [" + option_list + "]",
-                                 ExitCodes::RequiredError);
+
+        return RequiredError("Requires at most " + std::to_string(max_option) + " options be used and " +
+                                 std::to_string(used) + "were given from [" + option_list + "]",
+                             ExitCodes::RequiredError);
     }
 };
 
@@ -239,15 +246,20 @@ class RequiredError : public ParseError {
 class ArgumentMismatch : public ParseError {
     CLI11_ERROR_DEF(ParseError, ArgumentMismatch)
     CLI11_ERROR_SIMPLE(ArgumentMismatch)
-    ArgumentMismatch(std::string name, int expected, size_t recieved)
+    ArgumentMismatch(std::string name, int expected, std::size_t received)
         : ArgumentMismatch(expected > 0 ? ("Expected exactly " + std::to_string(expected) + " arguments to " + name +
-                                           ", got " + std::to_string(recieved))
+                                           ", got " + std::to_string(received))
                                         : ("Expected at least " + std::to_string(-expected) + " arguments to " + name +
-                                           ", got " + std::to_string(recieved)),
+                                           ", got " + std::to_string(received)),
                            ExitCodes::ArgumentMismatch) {}
 
-    static ArgumentMismatch AtLeast(std::string name, int num) {
-        return ArgumentMismatch(name + ": At least " + std::to_string(num) + " required");
+    static ArgumentMismatch AtLeast(std::string name, int num, std::size_t received) {
+        return ArgumentMismatch(name + ": At least " + std::to_string(num) + " required but received " +
+                                std::to_string(received));
+    }
+    static ArgumentMismatch AtMost(std::string name, int num, std::size_t received) {
+        return ArgumentMismatch(name + ": At Most " + std::to_string(num) + " required but received " +
+                                std::to_string(received));
     }
     static ArgumentMismatch TypedAtLeast(std::string name, int num, std::string type) {
         return ArgumentMismatch(name + ": " + std::to_string(num) + " required " + type + " missing");
@@ -276,6 +288,12 @@ class ExtrasError : public ParseError {
     CLI11_ERROR_DEF(ParseError, ExtrasError)
     explicit ExtrasError(std::vector<std::string> args)
         : ExtrasError((args.size() > 1 ? "The following arguments were not expected: "
+                                       : "The following argument was not expected: ") +
+                          detail::rjoin(args, " "),
+                      ExitCodes::ExtrasError) {}
+    ExtrasError(const std::string &name, std::vector<std::string> args)
+        : ExtrasError(name,
+                      (args.size() > 1 ? "The following arguments were not expected: "
                                        : "The following argument was not expected: ") +
                           detail::rjoin(args, " "),
                       ExitCodes::ExtrasError) {}
@@ -319,4 +337,4 @@ class OptionNotFound : public Error {
 
 /// @}
 
-} // namespace CLI
+}  // namespace CLI

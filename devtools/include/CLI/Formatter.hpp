@@ -1,9 +1,14 @@
+// Copyright (c) 2017-2020, University of Cincinnati, developed by Henry Schreiner
+// under NSF AWARD 1414736 and by the respective contributors.
+// All rights reserved.
+//
+// SPDX-License-Identifier: BSD-3-Clause
+
 #pragma once
 
-// Distributed under the 3-Clause BSD License.  See accompanying
-// file LICENSE or https://github.com/CLIUtils/CLI11 for details.
-
+#include <algorithm>
 #include <string>
+#include <vector>
 
 #include "CLI/App.hpp"
 #include "CLI/FormatterFwd.hpp"
@@ -28,8 +33,8 @@ inline std::string Formatter::make_positionals(const App *app) const {
 
     if(opts.empty())
         return std::string();
-    else
-        return make_group(get_label("Positionals"), true, opts);
+
+    return make_group(get_label("Positionals"), true, opts);
 }
 
 inline std::string Formatter::make_groups(const App *app, AppFormatMode mode) const {
@@ -39,11 +44,11 @@ inline std::string Formatter::make_groups(const App *app, AppFormatMode mode) co
     // Options
     for(const std::string &group : groups) {
         std::vector<const Option *> opts = app->get_options([app, mode, &group](const Option *opt) {
-            return opt->get_group() == group                    // Must be in the right group
-                   && opt->nonpositional()                      // Must not be a positional
-                   && (mode != AppFormatMode::Sub               // If mode is Sub, then
-                       || (app->get_help_ptr() != opt           // Ignore help pointer
-                           && app->get_help_all_ptr() != opt)); // Ignore help all pointer
+            return opt->get_group() == group                     // Must be in the right group
+                   && opt->nonpositional()                       // Must not be a positional
+                   && (mode != AppFormatMode::Sub                // If mode is Sub, then
+                       || (app->get_help_ptr() != opt            // Ignore help pointer
+                           && app->get_help_all_ptr() != opt));  // Ignore help all pointer
         });
         if(!group.empty() && !opts.empty()) {
             out << make_group(group, false, opts);
@@ -126,10 +131,10 @@ inline std::string Formatter::make_usage(const App *app, std::string name) const
 
 inline std::string Formatter::make_footer(const App *app) const {
     std::string footer = app->get_footer();
-    if(!footer.empty())
-        return footer + "\n";
-    else
-        return "";
+    if(footer.empty()) {
+        return std::string{};
+    }
+    return footer + "\n";
 }
 
 inline std::string Formatter::make_help(const App *app, std::string name, AppFormatMode mode) const {
@@ -151,7 +156,7 @@ inline std::string Formatter::make_help(const App *app, std::string name, AppFor
     out << make_positionals(app);
     out << make_groups(app, mode);
     out << make_subcommands(app, mode);
-    out << make_footer(app);
+    out << '\n' << make_footer(app);
 
     return out.str();
 }
@@ -165,7 +170,9 @@ inline std::string Formatter::make_subcommands(const App *app, AppFormatMode mod
     std::vector<std::string> subcmd_groups_seen;
     for(const App *com : subcommands) {
         if(com->get_name().empty()) {
-            out << make_expanded(com);
+            if(!com->get_group().empty()) {
+                out << make_expanded(com);
+            }
             continue;
         }
         std::string group_key = com->get_group();
@@ -213,7 +220,7 @@ inline std::string Formatter::make_expanded(const App *sub) const {
 
     // Drop blank spaces
     std::string tmp = detail::find_and_replace(out.str(), "\n\n", "\n");
-    tmp = tmp.substr(0, tmp.size() - 1); // Remove the final '\n'
+    tmp = tmp.substr(0, tmp.size() - 1);  // Remove the final '\n'
 
     // Indent all but the first line (the name)
     return detail::find_and_replace(tmp, "\n", "\n  ") + "\n";
@@ -222,8 +229,8 @@ inline std::string Formatter::make_expanded(const App *sub) const {
 inline std::string Formatter::make_option_name(const Option *opt, bool is_positional) const {
     if(is_positional)
         return opt->get_name(true, false);
-    else
-        return opt->get_name(false, true);
+
+    return opt->get_name(false, true);
 }
 
 inline std::string Formatter::make_option_opts(const Option *opt) const {
@@ -232,12 +239,13 @@ inline std::string Formatter::make_option_opts(const Option *opt) const {
     if(opt->get_type_size() != 0) {
         if(!opt->get_type_name().empty())
             out << " " << get_label(opt->get_type_name());
-        if(!opt->get_defaultval().empty())
-            out << "=" << opt->get_defaultval();
-        if(opt->get_expected() > 1)
-            out << " x " << opt->get_expected();
-        if(opt->get_expected() == -1)
+        if(!opt->get_default_str().empty())
+            out << "=" << opt->get_default_str();
+        if(opt->get_expected_max() == detail::expected_max_vector_size)
             out << " ...";
+        else if(opt->get_expected_min() > 1)
+            out << " x " << opt->get_expected();
+
         if(opt->get_required())
             out << " " << get_label("REQUIRED");
     }
@@ -262,12 +270,12 @@ inline std::string Formatter::make_option_usage(const Option *opt) const {
     // Note that these are positionals usages
     std::stringstream out;
     out << make_option_name(opt, true);
-
-    if(opt->get_expected() > 1)
-        out << "(" << std::to_string(opt->get_expected()) << "x)";
-    else if(opt->get_expected() < 0)
+    if(opt->get_expected_max() >= detail::expected_max_vector_size)
         out << "...";
+    else if(opt->get_expected_max() > 1)
+        out << "(" << opt->get_expected() << "x)";
+
     return opt->get_required() ? out.str() : "[" + out.str() + "]";
 }
 
-} // namespace CLI
+}  // namespace CLI

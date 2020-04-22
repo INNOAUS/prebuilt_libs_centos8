@@ -1,0 +1,11 @@
+prefix=/home/leo/git-innoaus/prebuilt_libs_centos8/devtools
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: log4cpp
+Description: C++ library for flexible logging, modeled after Log4j
+Version: 2.9.0
+Libs: -L${libdir} -llog4cpp
+Cflags: -I${includedir} 
+Libs.private: 
